@@ -8,17 +8,16 @@ import type { AnalysisResult, Checkpoint, HeatmapResult, RiskLevel, RouteOption 
 
 const riskLabels: Record<RiskLevel, string> = { LOW: 'Low', MODERATE: 'Moderate', HIGH: 'High', SEVERE: 'Severe', NO_TRAVEL: 'No travel' };
 const riskColors: Record<RiskLevel, string> = { LOW: 'green', MODERATE: 'yellow', HIGH: 'orange', SEVERE: 'red', NO_TRAVEL: 'purple' };
-const localDateTime = () => { const now = new Date(Date.now() + 30 * 60000); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const formatDuration = (minutes: number) => `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
 const formatTime = (value: string) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const formatDate = (value: string) => new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
 export default function App() {
-  const [origin, setOrigin] = useState('Hyderabad, India');
-  const [destination, setDestination] = useState('Vijayawada, India');
-  const [departure, setDeparture] = useState(localDateTime());
-  const [loadWeight, setLoadWeight] = useState('28000');
-  const [interval, setInterval] = useState('25');
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState('');
+  const [departure, setDeparture] = useState('');
+  const [loadWeight, setLoadWeight] = useState('');
+  const [interval, setInterval] = useState('');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState('');
   const [heatmap, setHeatmap] = useState<HeatmapResult | null>(null);
@@ -37,13 +36,38 @@ export default function App() {
   }, [selectedCheckpoint, analysis]);
 
   async function runAnalysis(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setLoading(true); setError(''); setAnalysis(null); setHeatmap(null); setSelectedCheckpoint(null);
+    event.preventDefault();
+    if (!origin.trim() || !destination.trim() || !departure || !loadWeight || !interval) {
+      setError('Please fill in all trip parameters.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    setAnalysis(null);
+    setHeatmap(null);
+    setSelectedCheckpoint(null);
     try {
-      const result = await analyzeRoutes({ origin, destination, departure_datetime: new Date(departure).toISOString(), load_weight_lb: Number(loadWeight), checkpoint_interval_miles: Number(interval) });
-      setAnalysis(result); setSelectedRouteId(result.recommendation.route_id); setForecastHour(0);
+      const departureDate = new Date(departure);
+      if (isNaN(departureDate.getTime())) {
+        setError('Please enter a valid departure date and time.');
+        setLoading(false);
+        return;
+      }
+      const result = await analyzeRoutes({
+        origin: origin.trim(),
+        destination: destination.trim(),
+        departure_datetime: departureDate.toISOString(),
+        load_weight_lb: Number(loadWeight),
+        checkpoint_interval_miles: Number(interval),
+      });
+      setAnalysis(result);
+      setSelectedRouteId(result.recommendation.route_id);
+      setForecastHour(0);
     } catch (requestError: any) {
       setError(requestError?.response?.data?.error || requestError?.message || 'Unable to analyze this trip.');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -93,7 +117,53 @@ export default function App() {
             icon="destination"
           />
         </div>
-        <div className="parameter-fields"><label className="field"><span>DEPARTURE DATE & TIME</span><div className="input-wrap"><CalendarClock size={17} /><input type="datetime-local" value={departure} onChange={event => setDeparture(event.target.value)} required /></div></label><label className="field"><span>LOAD WEIGHT (LB)</span><div className="input-wrap"><Package size={17} /><input type="number" min="0" step="1" value={loadWeight} onChange={event => setLoadWeight(event.target.value)} required /></div></label><label className="field"><span>CHECKPOINT INTERVAL</span><div className="input-wrap select-wrap"><Gauge size={17} /><select value={interval} onChange={event => setInterval(event.target.value)}><option value="10">Every 10 miles</option><option value="25">Every 25 miles</option><option value="50">Every 50 miles</option></select><ChevronDown size={15} /></div></label></div>
+        <div className="parameter-fields">
+          <label className="field">
+            <span>DEPARTURE DATE & TIME</span>
+            <div className="input-wrap">
+              <CalendarClock size={17} />
+              <input
+                type="datetime-local"
+                value={departure}
+                onChange={event => setDeparture(event.target.value)}
+                required
+              />
+            </div>
+          </label>
+          <label className="field">
+            <span>LOAD WEIGHT (LB)</span>
+            <div className="input-wrap">
+              <Package size={17} />
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={loadWeight}
+                onChange={event => setLoadWeight(event.target.value)}
+                placeholder="e.g. 35000"
+                required
+              />
+            </div>
+          </label>
+          <label className="field">
+            <span>CHECKPOINT INTERVAL</span>
+            <div className="input-wrap select-wrap">
+              <Gauge size={17} />
+              <select
+                value={interval}
+                onChange={event => setInterval(event.target.value)}
+                style={{ color: interval ? '#e5edf5' : '#607187' }}
+                required
+              >
+                <option value="" disabled>Select interval</option>
+                <option value="10">Every 10 miles</option>
+                <option value="25">Every 25 miles</option>
+                <option value="50">Every 50 miles</option>
+              </select>
+              <ChevronDown size={15} />
+            </div>
+          </label>
+        </div>
         <div className="form-footer"><span className="form-hint"><ShieldCheck size={14} /> Weather and load-weight risk rules will be applied.</span><button className="primary-button" type="submit" disabled={loading}>{loading ? <><RefreshCw size={16} className="spin" /> ANALYZING ROUTES</> : <>ANALYZE ROUTES <ArrowRight size={16} /></>}</button></div>
       </form>
       {error && <div className="error-banner"><AlertTriangle size={17} />{error}</div>}
