@@ -1,11 +1,18 @@
 RISK_ORDER = {"LOW": 0, "MODERATE": 1, "HIGH": 2, "SEVERE": 3, "NO_TRAVEL": 4}
 
-def classify_threshold(value: float, thresholds: tuple, inclusive: bool = False) -> str:
-    """Classify using exclusive bounds for wind and inclusive upper bounds for rain/snow."""
+def classify_threshold(value: float, thresholds: tuple, inclusive_max: bool = False) -> str:
+    """Classify value against ordered thresholds ((bound, level), ...).
+    Each tier covers [bound_prev, bound_next).
+    If inclusive_max is True, the highest tier's upper bound is inclusive: [bound_prev, bound_max].
+    """
+    last_index = len(thresholds) - 1
     for index, (upper_bound, level) in enumerate(thresholds):
-        matches = value < upper_bound if (not inclusive or index == 0) else value <= upper_bound
-        if matches:
-            return level
+        if index == last_index and inclusive_max:
+            if value <= upper_bound:
+                return level
+        else:
+            if value < upper_bound:
+                return level
     return "NO_TRAVEL"
 
 def evaluate_checkpoint(weather: dict, load_weight_lb: float) -> dict:
@@ -16,8 +23,8 @@ def evaluate_checkpoint(weather: dict, load_weight_lb: float) -> dict:
     rain = weather.get("rain_in_per_hour") or 0
     snow = weather.get("snow_in_per_hour") or 0
     wind_risk = classify_threshold(wind, ((25, "LOW"), (35, "MODERATE"), (45, "HIGH"), (55, "SEVERE")))
-    rain_risk = classify_threshold(rain, ((0.10, "LOW"), (0.25, "MODERATE"), (0.50, "HIGH"), (1.00, "SEVERE")), inclusive=True)
-    snow_risk = classify_threshold(snow, ((0.5, "LOW"), (1.0, "MODERATE"), (2.0, "HIGH"), (3.0, "SEVERE")), inclusive=True)
+    rain_risk = classify_threshold(rain, ((0.10, "LOW"), (0.25, "MODERATE"), (0.50, "HIGH"), (1.00, "SEVERE")), inclusive_max=True)
+    snow_risk = classify_threshold(snow, ((0.5, "LOW"), (1.0, "MODERATE"), (2.0, "HIGH"), (3.0, "SEVERE")), inclusive_max=True)
     # Load-specific wind rules override the base weather classification:
     # • ≥55 mph → No Travel for any load
     # • 45–54 mph + >30,000 lb → No Travel
